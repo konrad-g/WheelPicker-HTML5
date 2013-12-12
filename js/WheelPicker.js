@@ -9,6 +9,8 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
     var TOL_POS = 0.4;
     var POS_TOLERANCE = 0.02;
     var MAX_TIME_ACCELERATE = 200;
+    var INFINITE_MIN_SEGMENTS= 3;
+    var INFINITE_MIN_ELEMENTS = 30;
     
     var min = 0;
     var max = 0;
@@ -22,6 +24,8 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
     this.isReadOnly = isReadOnly;
     this.label = label;
     this.context = $(document.body);;
+    
+    this.segments = INFINITE_MIN_SEGMENTS;
     
     this.onChange = function(){};
     
@@ -42,6 +46,16 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
     }
     
     this.add = function() {
+        
+        // Get number of segments in infinite case
+        if(this.isInfinite) {
+            
+            this.segments = Math.ceil( INFINITE_MIN_ELEMENTS / this.elements.length );
+            
+            if(this.segments < INFINITE_MIN_SEGMENTS) {
+                this.segments = INFINITE_MIN_SEGMENTS
+            }
+        }
         
         var imgHtml = this.getHtml();
         $(this.context).append( imgHtml );
@@ -99,9 +113,9 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
     
     this.mouseMove = function(wheel, e){
         
-        
+        wheel.currentTop = $('ul', this.context).css('top').replace(/[^-\d\.]/g, '');
         var top =  parseFloat(-(wheel.initY - e.pageY)) + parseFloat(wheel.currentTop);
-        console.log('move: ' + top);
+        wheel.initY = e.pageY;
         
         // Check boundries
         if(!this.isInfinite) {
@@ -112,11 +126,14 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
                 top = min;
             }
             
+        } else {
+            
+            wheel.moveToMiddleSegment(top, wheel);
+            return;
         }
         
         // Stop all animations
         $('ul', wheel.context).stop();
-        
         $('ul', this.context).css('top', top);
         
     }
@@ -132,8 +149,6 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
         var pos = this.getPos();
         
         var lengthMoved = parseFloat(-(wheel.initY - e.pageY));
-        console.log("length moved: " + lengthMoved);
-        
         
         var addditionalPos = 0;
         
@@ -158,17 +173,132 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
             
         } else {
             // Get current position
-            if(this.isInfinite) {
-                // Set always in the middle segment
-                this.setWheelTo(this.elements.length + pos);
-            } else {
-                this.setWheelTo(pos);
-            }
+            this.setWheelTo(pos);
         }
         
     }
     
-    this.animWheelTo = function(posAbs) {
+    this.scrollBy = function(nmb, animate) {
+        
+        var wheel = this;
+        
+        var currentPos = this.getPos();
+        var newPos = currentPos + nmb;
+        
+        if(this.isInfinite) {
+           
+           //Reduce new position to standard size
+           var segmentsToPass = Math.abs( Math.floor(newPos / this.elements.length));
+           newPos = Math.abs(newPos);
+           newPos -= segmentsToPass * this.elements.length;
+           
+           
+           if(animate) {
+                wheel.currentTop = $('ul', wheel.context).css('top').replace(/[^-\d\.]/g, '');
+                this.animWheelInfTo(newPos, segmentsToPass, wheel);
+           } else {
+               this.setWheelTo(newPos);
+           }
+        
+        } else {
+            
+           if(newPos < 0) {
+               newPos = 0;
+           } 
+           if(newPos > (this.elements.length -1) ) {
+               newPos = this.elements.length -1;
+           } 
+            
+           if(animate) {
+               this.animWheelTo(newPos);
+           } else {
+               this.setWheelTo(newPos);
+           }
+            
+        }
+        
+    }
+    
+    this.moveToMiddleSegment = function(top, wheel) {
+        
+        top = parseFloat(top);
+        
+        // Put user back to center segment while scrolling manually
+        var middleSegment = Math.floor(wheel.segments / 2);
+
+        var maxCenter = elementHeight - (middleSegment * wheel.elements.length * elementHeight);
+        var minCenter = - elementHeight * (wheel.elements.length - 2) - (middleSegment * wheel.elements.length * elementHeight);
+
+        while(top > maxCenter) {
+            top -=  (wheel.elements.length  ) * elementHeight; 
+            wheel.currentTop = top;
+        }
+        while(top < minCenter) {
+            top += (wheel.elements.length  ) * elementHeight;
+            wheel.currentTop = top;
+        }
+
+        console.log("Top set: " + minCenter + ", "+ top + ", " + maxCenter);
+        
+        // Stop all animations
+        $('ul', wheel.context).stop();
+        $('ul', wheel.context).css('top', top);
+        
+    }
+    
+    /** This widget supports only rotating downwards using fixed number of scrolled elements
+     * TODO: Optimize scrolling so it won't generate so many elements, but can reuse it instead + add rotation in oposite direction
+     * @param {type} posAbs
+     * @param {type} segmentsToPass
+     * @param {type} wheel
+     * @returns {undefined}
+     */
+    this.animWheelInfTo = function(posAbs, segmentsToPass, wheel) {
+        
+        segmentsToPass = Math.abs(segmentsToPass);
+        //console.log('Segments to pass: ' + segmentsToPass + ",  posAbs:" + posAbs);
+        
+        var currentY = wheel.currentTop;
+        
+        // Move to middle segment
+        wheel.moveToMiddleSegment(currentY, wheel);
+        
+
+        if(segmentsToPass > 0) {
+
+            // Add all lacking segments and then rotate wheel
+            var wheels = "";
+            
+            // Set final value
+            posAbs += this.elements.length * segmentsToPass;
+            posAbs = Math.abs(posAbs);
+            
+            while(segmentsToPass > 0) {
+                wheels += this.generateWheelItems('tmpEntries');
+                segmentsToPass--;
+            }
+            
+            //Add new wheels
+            $('ul', this.context).append( wheels );
+            
+            wheel.animWheelTo(posAbs, function() {
+                // Clean all temporary created elements
+               $('.tmpEntries').remove();
+            });
+
+            //Rotate wheel by all numbers
+        } else {
+            // Go to standart position 
+            posAbs = Math.abs(posAbs);
+            wheel.animWheelTo(posAbs);
+        }
+            
+        
+        
+        
+    }
+    
+    this.animWheelTo = function(posAbs, onFinish) {
         
         var y = - ((posAbs-1) * elementHeight);
         var scrollToNearest = false;
@@ -209,21 +339,31 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
                         wheel.scrollToNearest();
                     } else {
                         wheel.onChange(wheel);
+                        
+                        if(onFinish != null) {
+                            onFinish();
+                        }
+                        
+                        if(wheel.isInfinite) {
+                            wheel.moveToMiddleSegment(y, wheel);
+                        }
                     }
                 });
             });
         });
         
+        
     }
     
     this.setWheelTo = function(pos) {
         
-        var y = - ((pos-1) * elementHeight);
-        
         // Always set to center segment
         if(this.isInfinite) {
-            y += this.elements.length * elementHeight;
+            var middleSegment = Math.floor(this.segments / 2);
+            var pos = (middleSegment * this.elements.length ) + pos;
         }
+        
+        var y = - ((pos-1) * elementHeight);
         
         $('ul', this.context).css('top', y);
         
@@ -249,7 +389,7 @@ function Scroller(elm, settings) {
         // Private functions
 
 
-        this.generateWheelItems = function() {
+        this.generateWheelItems = function(className) {
             
             var html = '';
             
@@ -260,13 +400,19 @@ function Scroller(elm, settings) {
         
             var segments = 1;
             if(this.isInfinite) {
-                segments = 3;
+                segments = this.segments;
+            }
+            
+            if(className == null) {
+                className = '';
+            } else {
+                className = ' ' + className;
             }
             
             while(segments > 0) {
                 
                 for (var j in this.elements) {
-                    html += '<li class="wheelItem" data-val="' + j + '" style="height:' + elementHeight + 'px;line-height:' + elementHeight + 'px;">' + this.elements[j] + '</li>';
+                    html += '<li class="wheelItem' + className + '" data-val="' + j + '" style="height:' + elementHeight + 'px;line-height:' + elementHeight + 'px;">' + this.elements[j] + '</li>';
                 }
                 
                 segments--;
@@ -362,7 +508,17 @@ function Scroller(elm, settings) {
         this.getValue = function() {
             
             var pos = this.getPos();
+            
+            if(isInfinite) {
+                
+                // Include other segments
+                var otherSegments = Math.floor( pos / this.elements.length );
+                pos -= otherSegments * this.elements.length;
+                
+            }
+            
             var value = this.elements[pos];
+            
             return value;
             
         }
@@ -372,7 +528,7 @@ function Scroller(elm, settings) {
             // Create wheels containers
             var theme = 'dw';
             var wheelNr = 0;
-            var html = '<div id ="' + this.id + '" class="dw-inline' + '">' +  '<div class="dw dwbg dwi"><div class="dwwr">';
+            var html = '<div id ="' + this.id + '" class="dw-inline' + '" style="position:absolute; top:' + size.y +'px; left:' + size.x +'px;">' +  '<div class="dw dwbg dwi"><div class="dwwr">';
 
             html += '<div class="dwc' + ' dwsc' + '"><div class="dwwc dwrc"><table cellpadding="0" cellspacing="0"><tr>';
             html += '<td><div class="dwwl dwrc dwwl' + wheelNr + '">'  + '<div class="dwl">' + this.label + '</div><div class="dww dwrc" style="height:' + this.size.height + 'px;min-width:' + this.size.width + 'px;"><ul>';
