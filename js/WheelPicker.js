@@ -1,4 +1,14 @@
-
+/**@author Konrad Gadzinowski <kgadzinowski@gmail.com>
+ * 
+ * @param {type} id
+ * @param {type} size
+ * @param {type} elements
+ * @param {type} defPos
+ * @param {type} isInfinite
+ * @param {type} isReadOnly
+ * @param {type} label
+ * @returns {WheelPicker}
+ */
 function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) {
     
     // Constants

@@ -1,4 +1,4 @@
-/**
+/** @author Konrad Gadzinowski <kgadzinowski@gmail.com>
  * 
  * @param {type} x [% ofParent]
  * @param {type} y [% ofParent]
