@@ -6,7 +6,12 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
     var MAX_SCROLL_TIME = 1500;
     var Y_EASE_OUT_RATIO = 0.3;
     var TIME_EASE_OUT_RATIO = 0.3;
+    var TOL_POS = 0.4;
     var POS_TOLERANCE = 0.02;
+    var MAX_TIME_ACCELERATE = 200;
+    
+    var min = 0;
+    var max = 0;
     
     // Public properties
     this.id = id;
@@ -21,6 +26,8 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
     this.onChange = function(){};
     
     var elementHeight = 0;
+    var min = 0;
+    var max = 0;
     
     this.setDefault = function() {
         
@@ -39,7 +46,11 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
         var imgHtml = this.getHtml();
         $(this.context).append( imgHtml );
         
+        // Generate global variables
         this.context = $('#' + this.id);
+        
+        max =  ((1 + TOL_POS) * elementHeight);
+        min = - elementHeight * (this.elements.length - (2 - TOL_POS));
         
         this.scrollTo(this.defPos, false);
         
@@ -61,10 +72,16 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
     this.mouseDown = function(wheel, e){
        
         if(!wheel.isReadOnly) {
-            wheel.currentTop = $('ul', this.context).css('top').replace(/[^-\d\.]/g, '');;
+            wheel.currentTop = $('ul', this.context).css('top').replace(/[^-\d\.]/g, '');
             
+            var date = new Date();
+            wheel.initTime = date.getTime(); 
+                    
             wheel.initY = e.pageY;
             //this.initY = e.pageY;
+            
+            // Stop all animations
+            $('ul', wheel.context).stop();
             
             $( document.body ).off('vmousemove' ).on('vmousemove' ,function(e) {
                 wheel.mouseMove(wheel, e);
@@ -73,6 +90,7 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
             $( document.body ).off('vmouseup' ).on('vmouseup' ,function(e) {
                 wheel.mouseUp(wheel, e);
             });
+            
         }
        
        
@@ -83,18 +101,47 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
         
         
         var top =  parseFloat(-(wheel.initY - e.pageY)) + parseFloat(wheel.currentTop);
-        console.log('Top: ' + top);
+        console.log('move: ' + top);
+        
+        // Check boundries
+        if(!this.isInfinite) {
+            if(top > max) {
+                top = max;
+            }
+            if(top < min) {
+                top = min;
+            }
+            
+        }
+        
+        // Stop all animations
+        $('ul', wheel.context).stop();
         
         $('ul', this.context).css('top', top);
         
     }
     
-    this.mouseUp = function(inv, e){
+    this.mouseUp = function(wheel, e){
         
-        $( document.body ).off('vmouseup'  );
-        $( document.body ).off('vmousemove' );
+        $( document.body ).off( 'vmouseup' );
+        $( document.body ).off( 'vmousemove' );
         
-        this.scrollToNearest();
+        var date = new Date();
+        var timeDiff =  date.getTime() - wheel.initTime; 
+        
+        var pos = this.getPos();
+        
+        var lengthMoved = parseFloat(-(wheel.initY - e.pageY));
+        console.log("length moved: " + lengthMoved);
+        
+        
+        var addditionalPos = 0;
+        
+        if(timeDiff < MAX_TIME_ACCELERATE) {
+            addditionalPos = -Math.round( (2*lengthMoved)/timeDiff );
+        }
+        
+        this.scrollToNearest(addditionalPos);
         
     }
     
@@ -124,8 +171,20 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
     this.animWheelTo = function(posAbs) {
         
         var y = - ((posAbs-1) * elementHeight);
+        var scrollToNearest = false;
         
-        var lengthToMove = $('ul', this.context).css('top').replace(/[^-\d\.]/g, '');
+        if(!this.isInfinite) {
+            if(y > max) {
+                y = max;
+                scrollToNearest = true;
+            }
+            if(y < min) {
+                y = min;
+                scrollToNearest = true;
+            }
+        }
+        
+        var lengthToMove = y - $('ul', this.context).css('top').replace(/[^-\d\.]/g, '');
         
         var yEaseOut = lengthToMove * Y_EASE_OUT_RATIO;
         var time = Math.abs(lengthToMove / SPEED);
@@ -134,21 +193,26 @@ function WheelPicker(id, size, elements, defPos, isInfinite, isReadOnly, label) 
             time = MAX_SCROLL_TIME;
         }
         
-        console.log('Time: ' + time);
-        
         var timeEase = time * TIME_EASE_OUT_RATIO;
         
         var wheel  = this;
         
-        //$('ul', wheel.context).stop().animate({ top : (y - yEaseOut) }, 'fast', 'easeInCirc', function () {
+        $('ul', wheel.context).stop().animate({ top : (y - yEaseOut) }, timeEase, 'easeInCirc', function () {
 
             //animate main body of the animation
-            $('ul', wheel.context).animate({ top : y  }, 'fast', 'linear', function () {
+            $('ul', wheel.context).animate({ top : y  }, time - timeEase, 'linear', function () {
 
                 //animate the last easing
-                //$('ul', wheel.context).animate({ top :(y) }, 'fast', 'easeOutCirc');
+                $('ul', wheel.context).animate({ top :(y) }, timeEase, 'easeOutCirc', function() {
+                    
+                    if(scrollToNearest) {
+                        wheel.scrollToNearest();
+                    } else {
+                        wheel.onChange(wheel);
+                    }
+                });
             });
-        //});
+        });
         
     }
     
@@ -243,29 +307,49 @@ function Scroller(elm, settings) {
             
         }
 
-        this.scrollToNearest = function () {
+        this.scrollToNearest = function (additionalPos) {
             var y = $('ul', this.context).css('top').replace(/[^-\d\.]/g, '');;
             
             if(isNaN(y)) {
                 this.animWheelTo(this.defPos);
                 return;
             }
+            
+            if(additionalPos == null) {
+                additionalPos = 0;
+            }
 
             // Find if wheel needs to be set 
             
             var valueModulus = y % elementHeight;
             //if(valueModulus > POS_TOLERANCE) {
-                var nearestPos = this.getPos();
+                var nearestPos = this.getPos() + additionalPos;
+                
                 this.animWheelTo(nearestPos);
             //}
         }
         
         this.getPos = function() {
             
-            var y = $('ul', this.context).css('top').replace(/[^-\d\.]/g, '');;
+            var y = $('ul', this.context ).css('top').replace(/[^-\d\.]/g, '');
             
             if(isNaN(y)) {
-                return 0;
+                return this.defPos;
+            }
+            
+            // Check boundries
+            if(!this.isInfinite) {
+
+                var maxPos = elementHeight;
+                var minPos = -elementHeight * (this.elements.length-2 );
+                
+                if(y < minPos) {
+                    y = minPos;
+                }
+                if(y > maxPos) {
+                    y = maxPos;
+                }
+
             }
             
             var value = -Math.round( y / elementHeight );
@@ -279,7 +363,6 @@ function Scroller(elm, settings) {
             
             var pos = this.getPos();
             var value = this.elements[pos];
-            
             return value;
             
         }

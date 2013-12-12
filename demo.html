@@ -132,8 +132,8 @@
     
     var wheelX = scrWidth * 0.1;
     var wheelY = scrHeight * 0.1;
-    var wheelWidth = scrWidth * 0.1;
-    var wheelHeight = scrHeight * 0.4;
+    var wheelWidth = scrWidth * 0.05;
+    var wheelHeight = scrHeight * 0.1;
     
     var wheelRect = new Rect(wheelX, wheelY, wheelWidth, wheelHeight);
     var wheelRect2 = new Rect(wheelX*1.5, wheelY, wheelWidth, wheelHeight);
@@ -157,9 +157,15 @@
     var label = "";
     var wheelPicker = new WheelPicker('wheelPicker', wheelRect, wheelElements, 2, false, false, label, context);
     wheelPicker.add();
+    wheelPicker.setOnChangeListener(function(wheel) {
+        console.log('Wheel picker: ' + wheel.getValue());
+    });
     
-    var wheelPicker = new WheelPicker('wheelPickerInf', wheelRect2, wheelElements, 8, true, false, label, context);
-    wheelPicker.add();
+    var wheelPickerInf = new WheelPicker('wheelPickerInf', wheelRect2, wheelElements, 8, true, false, label, context);
+    wheelPickerInf.add();
+    wheelPickerInf.setOnChangeListener(function(wheel) {
+        console.log('Wheel inf picker: ' + wheel.getValue());
+    });
 
     console.log("Wheel should be here..");
 
